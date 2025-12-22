@@ -1,0 +1,138 @@
+@using TraderUI.Models
+@inject TraderUI.Services.ApiClient ApiClient
+@inject TraderUI.Services.SessionService SessionService
+
+@if (IsVisible && Trade != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Swap Trade</h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(Trade.Id))
+                    {
+                        <div class="alert alert-info mb-3">
+                            <strong>Trade ID:</strong> <span class="font-monospace">@Trade.Id</span>
+                        </div>
+                    }
+                    
+                    <SwapForm Request="@editRequest"
+                              OnSubmit="HandleSubmit"
+                              OnCancel="Close"
+                              SubmitButtonText="Update Trade" />
+                              
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3">@errorMessage</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsVisible { get; set; }
+    
+    [Parameter]
+    public SwapTrade? Trade { get; set; }
+    
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+    
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+    
+    private SwapTradeCreateRequest editRequest = new();
+    private string? errorMessage;
+    
+    protected override void OnParametersSet()
+    {
+        if (Trade != null)
+        {
+            // Map SwapTrade to SwapTradeCreateRequest
+            editRequest = new SwapTradeCreateRequest
+            {
+                Counterparty = Trade.Counterparty,
+                TradeDate = Trade.TradeDate,
+                EffectiveDate = Trade.EffectiveDate,
+                MaturityDate = Trade.MaturityDate,
+                NotionalAmount = Trade.NotionalAmount,
+                NotionalCurrency = Trade.NotionalCurrency,
+                Leg1 = Trade.Leg1 != null ? new SwapLegRequest
+                {
+                    LegType = Trade.Leg1.LegType,
+                    PayerReceiver = Trade.Leg1.PayerReceiver,
+                    FixedRate = Trade.Leg1.FixedRate,
+                    ReferenceRate = Trade.Leg1.ReferenceRate,
+                    Spread = Trade.Leg1.Spread,
+                    ResetFrequency = Trade.Leg1.ResetFrequency,
+                    PaymentFrequency = Trade.Leg1.PaymentFrequency,
+                    DayCountConvention = Trade.Leg1.DayCountConvention,
+                    BusinessDayConvention = Trade.Leg1.BusinessDayConvention,
+                    PaymentCalendar = Trade.Leg1.PaymentCalendar,
+                    CompoundingMethod = Trade.Leg1.CompoundingMethod,
+                    CompoundingFrequency = Trade.Leg1.CompoundingFrequency,
+                    AveragingMethod = Trade.Leg1.AveragingMethod,
+                    AveragingFrequency = Trade.Leg1.AveragingFrequency
+                } : null,
+                Leg2 = Trade.Leg2 != null ? new SwapLegRequest
+                {
+                    LegType = Trade.Leg2.LegType,
+                    PayerReceiver = Trade.Leg2.PayerReceiver,
+                    FixedRate = Trade.Leg2.FixedRate,
+                    ReferenceRate = Trade.Leg2.ReferenceRate,
+                    Spread = Trade.Leg2.Spread,
+                    ResetFrequency = Trade.Leg2.ResetFrequency,
+                    PaymentFrequency = Trade.Leg2.PaymentFrequency,
+                    DayCountConvention = Trade.Leg2.DayCountConvention,
+                    BusinessDayConvention = Trade.Leg2.BusinessDayConvention,
+                    PaymentCalendar = Trade.Leg2.PaymentCalendar,
+                    CompoundingMethod = Trade.Leg2.CompoundingMethod,
+                    CompoundingFrequency = Trade.Leg2.CompoundingFrequency,
+                    AveragingMethod = Trade.Leg2.AveragingMethod,
+                    AveragingFrequency = Trade.Leg2.AveragingFrequency
+                } : null
+            };
+        }
+    }
+    
+    private async Task HandleSubmit()
+    {
+        errorMessage = null;
+        
+        if (editRequest == null || Trade == null)
+        {
+            errorMessage = "Invalid trade data";
+            return;
+        }
+
+        try
+        {
+            var response = await ApiClient.UpdateSwapAsync(Trade.Id, editRequest, SessionService.CurrentUserName!);
+            
+            if (response.IsSuccess)
+            {
+                await OnSaved.InvokeAsync();
+                await Close();
+            }
+            else
+            {
+                errorMessage = response.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+    }
+    
+    private async Task Close()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

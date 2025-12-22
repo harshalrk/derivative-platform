@@ -1,0 +1,56 @@
+﻿@inherits LayoutComponentBase
+@inject TraderUI.Services.SessionService SessionService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 navbar navbar-dark bg-dark">
+            @if (SessionService.IsUserSet)
+            {
+                <span class="navbar-text text-light">
+                    Welcome, @SessionService.CurrentUserName
+                </span>
+                <button class="btn btn-outline-light btn-sm ms-auto" @onclick="Logout">
+                    Logout
+                </button>
+            }
+            else
+            {
+                <span class="navbar-text text-light">Trader System</span>
+            }
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        SessionService.OnSessionChanged += StateHasChanged;
+    }
+    
+    private void Logout()
+    {
+        SessionService.ClearUser();
+        Navigation.NavigateTo("/entry", forceLoad: true);
+    }
+    
+    public void Dispose()
+    {
+        SessionService.OnSessionChanged -= StateHasChanged;
+    }
+}

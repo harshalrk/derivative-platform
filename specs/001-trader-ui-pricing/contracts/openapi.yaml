@@ -1,0 +1,163 @@
+openapi: 3.0.3
+info:
+  title: Trader UI + Pricing API
+  version: 0.1.0
+servers:
+  - url: http://localhost:5000
+paths:
+  /session:
+    post:
+      summary: Set session display name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /trades:
+    get:
+      summary: List trades for current session user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trade'
+    post:
+      summary: Create a new trade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trade'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pricing/{tradeId}:
+    post:
+      summary: Price a trade using deterministic random market data
+      parameters:
+        - name: tradeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seed:
+                  type: integer
+              required: [seed]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResult'
+        '404':
+          description: Trade not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Trade:
+      type: object
+      properties:
+        id:
+          type: string
+        instrument:
+          type: string
+        side:
+          type: string
+          enum: [Buy, Sell]
+        quantity:
+          type: number
+          format: double
+        price:
+          type: number
+          format: double
+        currency:
+          type: string
+        tradeDate:
+          type: string
+          format: date
+        bookedBy:
+          type: string
+    TradeCreate:
+      type: object
+      properties:
+        instrument:
+          type: string
+        side:
+          type: string
+          enum: [Buy, Sell]
+        quantity:
+          type: number
+          format: double
+        price:
+          type: number
+          format: double
+        currency:
+          type: string
+        tradeDate:
+          type: string
+          format: date
+      required: [instrument, side, quantity, price, currency, tradeDate]
+    PricingResult:
+      type: object
+      properties:
+        tradeId:
+          type: string
+        price:
+          type: number
+          format: double
+        currency:
+          type: string
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string

@@ -1,0 +1,458 @@
+@page "/trades"
+@inject TraderUI.Services.SessionService SessionService
+@inject TraderUI.Services.ApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<TradesList> Logger
+@using TraderUI.Models
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+
+<PageTitle>My Trades</PageTitle>
+
+@if (isCheckingSession)
+{
+    <div class="container-fluid">
+        <div class="d-flex justify-content-center mt-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+    return;
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>My Trades</h2>
+                <div>
+                    <button class="btn btn-primary me-2" @onclick="PriceSelectedTrades" disabled="@(!selectedTradeIds.Any() || isPricing)">
+                        @if (isPricing)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span> Pricing...</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-calculator"></i> <span>Price Selected (@selectedTradeIds.Count)</span>
+                        }
+                    </button>
+                    <button class="btn btn-danger me-2" @onclick="ShowDeleteConfirmation" disabled="@(!selectedTradeIds.Any() || isDeleting)">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span> Deleting...</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-trash"></i> <span>Delete Selected (@selectedTradeIds.Count)</span>
+                        }
+                    </button>
+                    <a href="/new-trade" class="btn btn-success">
+                        <i class="fas fa-plus"></i> New Trade
+                    </a>
+                </div>
+            </div>
+            
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger" role="alert">
+                    @errorMessage
+                </div>
+            }
+            
+            @if (isLoading)
+            {
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (trades?.Any() == true)
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th scope="col">
+                                    <input type="checkbox" @onchange="ToggleSelectAll" checked="@isAllSelected" />
+                                </th>
+                                <th scope="col" style="cursor: pointer" @onclick="() => SortBy(nameof(TradeResponse.ProductType))">Product</th>
+                                <th scope="col" style="cursor: pointer" @onclick="() => SortBy(nameof(TradeResponse.Counterparty))">Counterparty</th>
+                                <th scope="col" style="cursor: pointer" @onclick="() => SortBy(nameof(TradeResponse.TradeDate))">Trade Date</th>
+                                <th scope="col">NPV</th>
+                                <th scope="col">Trade ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var trade in sortedTrades)
+                            {
+                                <tr @ondblclick="() => HandleTradeDoubleClick(trade.Id)" style="cursor: pointer;">
+                                    <td @onclick:stopPropagation="true">
+                                        <input type="checkbox" checked="@selectedTradeIds.Contains(trade.Id)" 
+                                               @onchange="() => ToggleTradeSelection(trade.Id)" />
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">@trade.ProductType</span>
+                                    </td>
+                                    <td>@trade.Counterparty</td>
+                                    <td>@trade.TradeDate.ToString("yyyy-MM-dd")</td>
+                                    <td>
+                                        @if (trade.Npv.HasValue)
+                                        {
+                                            <span class="text-success fw-bold">@trade.Npv.Value.ToString("N2")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td><span class="font-monospace small">@trade.Id</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center mt-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No trades found</h4>
+                    <p class="text-muted">Get started by creating your first trade.</p>
+                    <a href="/new-trade" class="btn btn-primary">Create Trade</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<SwapEditModal IsVisible="@showEditModal"
+               Trade="@editingSwapTrade"
+               OnClose="@(() => { showEditModal = false; editingSwapTrade = null; })"
+               OnSaved="@HandleTradeSaved" />
+
+@if (showDeleteConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="() => showDeleteConfirmation = false" disabled="@isDeleting"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete @selectedTradeIds.Count trade(s)?</p>
+                    <p class="text-danger"><strong>This action cannot be undone.</strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showDeleteConfirmation = false" disabled="@isDeleting">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteSelectedTrades" disabled="@isDeleting">
+                        @if (isDeleting)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span> Deleting...</span>
+                        }
+                        else
+                        {
+                            <span>Delete</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IEnumerable<TradeResponse>? trades;
+    private IEnumerable<TradeResponse> sortedTrades => trades?.OrderBy(GetSortSelector) ?? Enumerable.Empty<TradeResponse>();
+    private string? errorMessage;
+    private bool isLoading = true;
+    private bool isCheckingSession = true;
+    private bool showEditModal = false;
+    private SwapTrade? editingSwapTrade;
+    private string sortColumn = nameof(TradeResponse.TradeDate);
+    private bool sortAscending = false;
+    private HubConnection? hubConnection;
+    
+    // Selection state
+    private HashSet<string> selectedTradeIds = new();
+    private bool isAllSelected => trades?.Any() == true && selectedTradeIds.Count == trades.Count();
+    private bool isPricing;
+    private bool isDeleting = false;
+    private bool showDeleteConfirmation = false;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user parameter exists in URL
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("user", out var userParam))
+        {
+            var userName = userParam.ToString();
+            if (!string.IsNullOrEmpty(userName))
+            {
+                // Set session from URL parameter
+                SessionService.SetUser(userName);
+                Logger.LogInformation("Session set from URL parameter: {UserName}", userName);
+            }
+        }
+        
+        if (!SessionService.IsUserSet)
+        {
+            Logger.LogWarning("No session found, redirecting to entry page");
+            Navigation.NavigateTo("/entry");
+            return;
+        }
+        
+        isCheckingSession = false;
+        StateHasChanged();
+        
+        Logger.LogInformation("About to load trades...");
+        await LoadTrades();
+        
+        Logger.LogInformation("About to initialize SignalR...");
+        await InitializeSignalR();
+        Logger.LogInformation("SignalR initialization completed");
+    }
+    
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl("http://api:7050/hubs/trades")
+                .WithAutomaticReconnect()
+                .ConfigureLogging(logging =>
+                {
+                    logging.SetMinimumLevel(LogLevel.Debug);
+                })
+                .Build();
+
+            hubConnection.On<object>("TradeCreated", async (trade) =>
+            {
+                Logger.LogInformation("Received TradeCreated event via SignalR");
+                await InvokeAsync(async () =>
+                {
+                    await LoadTrades();
+                    StateHasChanged();
+                });
+            });
+
+            hubConnection.On<object>("TradeUpdated", async (trade) =>
+            {
+                Logger.LogInformation("Received TradeUpdated event via SignalR");
+                await InvokeAsync(async () =>
+                {
+                    await LoadTrades();
+                    StateHasChanged();
+                });
+            });
+
+            await hubConnection.StartAsync();
+            Logger.LogInformation($"SignalR connection established. State: {hubConnection.State}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing SignalR connection");
+        }
+    }
+    
+    private async Task LoadTrades()
+    {
+        if (!SessionService.IsUserSet) return;
+        
+        isLoading = true;
+        errorMessage = null;
+        
+        try
+        {
+            var response = await ApiClient.GetTradesAsync(SessionService.CurrentUserName!);
+            if (response.IsSuccess)
+            {
+                trades = response.Data;
+            }
+            else
+            {
+                errorMessage = response.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+    
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+    
+    private object GetSortSelector(TradeResponse trade) => sortColumn switch
+    {
+        nameof(TradeResponse.ProductType) => trade.ProductType,
+        nameof(TradeResponse.Counterparty) => trade.Counterparty,
+        nameof(TradeResponse.TradeDate) => sortAscending ? trade.TradeDate : DateTime.MaxValue.Subtract(trade.TradeDate - DateTime.MinValue),
+        _ => trade.TradeDate
+    };
+    
+    private void ToggleTradeSelection(string tradeId)
+    {
+        if (selectedTradeIds.Contains(tradeId))
+        {
+            selectedTradeIds.Remove(tradeId);
+        }
+        else
+        {
+            selectedTradeIds.Add(tradeId);
+        }
+    }
+    
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        if (e.Value is bool isChecked && isChecked)
+        {
+            selectedTradeIds = new HashSet<string>(trades?.Select(t => t.Id) ?? Enumerable.Empty<string>());
+        }
+        else
+        {
+            selectedTradeIds.Clear();
+        }
+    }
+    
+    private async Task PriceSelectedTrades()
+    {
+        if (!selectedTradeIds.Any()) return;
+        
+        isPricing = true;
+        errorMessage = null;
+        
+        try
+        {
+            var response = await ApiClient.PriceTradesAsync(selectedTradeIds.ToList());
+            
+            if (response.IsSuccess)
+            {
+                // Reload trades to get updated NPV values
+                await LoadTrades();
+                selectedTradeIds.Clear();
+            }
+            else
+            {
+                errorMessage = response.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+            Logger.LogError(ex, "Error pricing selected trades");
+        }
+        finally
+        {
+            isPricing = false;
+        }
+    }
+    
+    private void ShowDeleteConfirmation()
+    {
+        if (selectedTradeIds.Any())
+        {
+            showDeleteConfirmation = true;
+        }
+    }
+    
+    private async Task DeleteSelectedTrades()
+    {
+        if (!selectedTradeIds.Any()) return;
+        
+        isDeleting = true;
+        errorMessage = null;
+        var tradesToDelete = selectedTradeIds.ToList();
+        var failedDeletions = new List<string>();
+        
+        try
+        {
+            foreach (var tradeId in tradesToDelete)
+            {
+                var response = await ApiClient.DeleteSwapAsync(tradeId, SessionService.CurrentUserName!);
+                if (!response.IsSuccess)
+                {
+                    failedDeletions.Add(tradeId);
+                    Logger.LogError("Failed to delete trade {TradeId}: {Error}", tradeId, response.ErrorMessage);
+                }
+            }
+            
+            if (failedDeletions.Any())
+            {
+                errorMessage = $"Failed to delete {failedDeletions.Count} trade(s)";
+            }
+            
+            // Reload trades and clear selection
+            await LoadTrades();
+            selectedTradeIds.Clear();
+            showDeleteConfirmation = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+            Logger.LogError(ex, "Error deleting selected trades");
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+    
+    private async Task HandleTradeDoubleClick(string tradeId)
+    {
+        try
+        {
+            // Fetch the full swap trade details
+            var response = await ApiClient.GetSwapsAsync(SessionService.CurrentUserName!);
+            if (response.IsSuccess && response.Data != null)
+            {
+                editingSwapTrade = response.Data.FirstOrDefault(t => t.Id == tradeId);
+                if (editingSwapTrade != null)
+                {
+                    showEditModal = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading trade for editing");
+            errorMessage = "Failed to load trade details";
+        }
+    }
+    
+    private async Task HandleTradeSaved()
+    {
+        showEditModal = false;
+        editingSwapTrade = null;
+        await LoadTrades();
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

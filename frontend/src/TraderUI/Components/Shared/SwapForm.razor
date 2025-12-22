@@ -1,0 +1,477 @@
+@using TraderUI.Models
+@using TraderUI.Services
+@inject ApiClient ApiClient
+
+@if (_isLoading)
+{
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading configuration...</span>
+        </div>
+    </div>
+}
+else
+{
+<EditForm Model="@Request" OnValidSubmit="@HandleSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="card border-primary mb-4">
+        <div class="card-header bg-primary bg-opacity-10">
+            <h6 class="mb-0 text-primary">Swap Details</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Counterparty</label>
+                    <InputText @bind-Value="Request.Counterparty" class="form-control" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Currency</label>
+                    <InputText @bind-Value="Request.Currency" class="form-control" />
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Notional Amount</label>
+                    <InputNumber @bind-Value="Request.NotionalAmount" class="form-control" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Trade Date</label>
+                    <InputDate @bind-Value="Request.TradeDate" class="form-control" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Maturity Date</label>
+                    <InputDate @bind-Value="Request.MaturityDate" class="form-control" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- LEG 1 -->
+        <div class="col-md-6">
+            <div class="card border-success mb-3">
+                <div class="card-header bg-success bg-opacity-10">
+                    <h6 class="mb-0 text-success">Leg 1</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Leg Type</label>
+                        <InputSelect @bind-Value="Request.Leg1.LegType" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var lt in _legTypes)
+                            {
+                                <option value="@lt.Code">@lt.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payer/Receiver</label>
+                        <InputSelect @bind-Value="Request.Leg1.PayerReceiver" @bind-Value:after="UpdateLeg2PayerReceiver" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var pr in _payerReceiverTypes)
+                            {
+                                <option value="@pr.Code">@pr.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    @if (Request.Leg1.LegType == "FIXED")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Fixed Rate (%)</label>
+                            <InputNumber @bind-Value="Request.Leg1.FixedRate" class="form-control" />
+                        </div>
+                    }
+                    else if (Request.Leg1.LegType == "FLOATING")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Reference Rate</label>
+                            <InputSelect @bind-Value="Request.Leg1.ReferenceRate" class="form-select">
+                                <option value="">-- Select --</option>
+                                @foreach (var rr in _referenceRates)
+                                {
+                                    <option value="@rr.Code">@rr.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Spread (bps)</label>
+                            <InputNumber @bind-Value="Request.Leg1.Spread" class="form-control" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Reset Frequency</label>
+                            <InputSelect @bind-Value="Request.Leg1.ResetFrequency" class="form-select">
+                                <option value="">-- Select --</option>
+                                @foreach (var f in _frequencies)
+                                {
+                                    <option value="@f.Code">@f.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Frequency</label>
+                        <InputSelect @bind-Value="Request.Leg1.PaymentFrequency" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var f in _frequencies)
+                            {
+                                <option value="@f.Code">@f.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Day Count Convention</label>
+                        <InputSelect @bind-Value="Request.Leg1.DayCountConvention" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var dc in _dayCountConventions)
+                            {
+                                <option value="@dc.Code">@dc.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Business Day Convention</label>
+                        <InputSelect @bind-Value="Request.Leg1.BusinessDayConvention" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var bd in _businessDayConventions)
+                            {
+                                <option value="@bd.Code">@bd.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Calendar</label>
+                        <InputSelect @bind-Value="Request.Leg1.PaymentCalendar" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var pc in _paymentCalendars)
+                            {
+                                <option value="@pc.Code">@pc.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    @if (Request.Leg1.LegType == "FLOATING")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Compounding Method</label>
+                            <InputSelect @bind-Value="Request.Leg1.CompoundingMethod" class="form-select">
+                                <option value="">None</option>
+                                @foreach (var cm in _compoundingMethods)
+                                {
+                                    <option value="@cm.Code">@cm.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Request.Leg1.CompoundingMethod))
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Compounding Frequency</label>
+                                <InputSelect @bind-Value="Request.Leg1.CompoundingFrequency" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    @foreach (var f in _frequencies)
+                                    {
+                                        <option value="@f.Code">@f.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Averaging Method</label>
+                            <InputSelect @bind-Value="Request.Leg1.AveragingMethod" class="form-select">
+                                <option value="">None</option>
+                                @foreach (var am in _averagingMethods)
+                                {
+                                    <option value="@am.Code">@am.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Request.Leg1.AveragingMethod))
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Averaging Frequency</label>
+                                <InputSelect @bind-Value="Request.Leg1.AveragingFrequency" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    @foreach (var f in _frequencies)
+                                    {
+                                        <option value="@f.Code">@f.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- LEG 2 -->
+        <div class="col-md-6">
+            <div class="card border-info mb-3">
+                <div class="card-header bg-info bg-opacity-10">
+                    <h6 class="mb-0 text-info">Leg 2</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Leg Type</label>
+                        <InputSelect @bind-Value="Request.Leg2.LegType" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var lt in _legTypes)
+                            {
+                                <option value="@lt.Code">@lt.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payer/Receiver</label>
+                        <InputSelect @bind-Value="Request.Leg2.PayerReceiver" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var pr in _payerReceiverTypes)
+                            {
+                                <option value="@pr.Code">@pr.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    @if (Request.Leg2.LegType == "FIXED")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Fixed Rate (%)</label>
+                            <InputNumber @bind-Value="Request.Leg2.FixedRate" class="form-control" />
+                        </div>
+                    }
+                    else if (Request.Leg2.LegType == "FLOATING")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Reference Rate</label>
+                            <InputSelect @bind-Value="Request.Leg2.ReferenceRate" class="form-select">
+                                <option value="">-- Select --</option>
+                                @foreach (var rr in _referenceRates)
+                                {
+                                    <option value="@rr.Code">@rr.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Spread (bps)</label>
+                            <InputNumber @bind-Value="Request.Leg2.Spread" class="form-control" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Reset Frequency</label>
+                            <InputSelect @bind-Value="Request.Leg2.ResetFrequency" class="form-select">
+                                <option value="">-- Select --</option>
+                                @foreach (var f in _frequencies)
+                                {
+                                    <option value="@f.Code">@f.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Frequency</label>
+                        <InputSelect @bind-Value="Request.Leg2.PaymentFrequency" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var f in _frequencies)
+                            {
+                                <option value="@f.Code">@f.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Day Count Convention</label>
+                        <InputSelect @bind-Value="Request.Leg2.DayCountConvention" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var dc in _dayCountConventions)
+                            {
+                                <option value="@dc.Code">@dc.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Business Day Convention</label>
+                        <InputSelect @bind-Value="Request.Leg2.BusinessDayConvention" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var bd in _businessDayConventions)
+                            {
+                                <option value="@bd.Code">@bd.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Payment Calendar</label>
+                        <InputSelect @bind-Value="Request.Leg2.PaymentCalendar" class="form-select">
+                            <option value="">-- Select --</option>
+                            @foreach (var pc in _paymentCalendars)
+                            {
+                                <option value="@pc.Code">@pc.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+
+                    @if (Request.Leg2.LegType == "FLOATING")
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Compounding Method</label>
+                            <InputSelect @bind-Value="Request.Leg2.CompoundingMethod" class="form-select">
+                                <option value="">None</option>
+                                @foreach (var cm in _compoundingMethods)
+                                {
+                                    <option value="@cm.Code">@cm.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Request.Leg2.CompoundingMethod))
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Compounding Frequency</label>
+                                <InputSelect @bind-Value="Request.Leg2.CompoundingFrequency" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    @foreach (var f in _frequencies)
+                                    {
+                                        <option value="@f.Code">@f.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Averaging Method</label>
+                            <InputSelect @bind-Value="Request.Leg2.AveragingMethod" class="form-select">
+                                <option value="">None</option>
+                                @foreach (var am in _averagingMethods)
+                                {
+                                    <option value="@am.Code">@am.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(Request.Leg2.AveragingMethod))
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Averaging Frequency</label>
+                                <InputSelect @bind-Value="Request.Leg2.AveragingFrequency" class="form-select">
+                                    <option value="">-- Select --</option>
+                                    @foreach (var f in _frequencies)
+                                    {
+                                        <option value="@f.Code">@f.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button type="submit" class="btn btn-primary">@SubmitButtonText</button>
+        <button type="button" class="btn btn-secondary" @onclick="HandleCancel">Cancel</button>
+    </div>
+</EditForm>
+}
+
+@code {
+    [Parameter] public SwapTradeCreateRequest Request { get; set; } = new();
+    [Parameter] public string SubmitButtonText { get; set; } = "Create Swap";
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _isLoading = true;
+    private List<Frequency> _frequencies = new();
+    private List<DayCountConvention> _dayCountConventions = new();
+    private List<BusinessDayConvention> _businessDayConventions = new();
+    private List<ReferenceRate> _referenceRates = new();
+    private List<PaymentCalendar> _paymentCalendars = new();
+    private List<CompoundingMethod> _compoundingMethods = new();
+    private List<AveragingMethod> _averagingMethods = new();
+    private List<LegType> _legTypes = new();
+    private List<PayerReceiverType> _payerReceiverTypes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigurationData();
+    }
+
+    private async Task LoadConfigurationData()
+    {
+        var frequenciesResponse = await ApiClient.GetFrequenciesAsync();
+        if (frequenciesResponse.IsSuccess)
+            _frequencies = frequenciesResponse.Data?.ToList() ?? new();
+
+        var dayCountResponse = await ApiClient.GetDayCountConventionsAsync();
+        if (dayCountResponse.IsSuccess)
+            _dayCountConventions = dayCountResponse.Data?.ToList() ?? new();
+
+        var businessDayResponse = await ApiClient.GetBusinessDayConventionsAsync();
+        if (businessDayResponse.IsSuccess)
+            _businessDayConventions = businessDayResponse.Data?.ToList() ?? new();
+
+        var referenceRatesResponse = await ApiClient.GetReferenceRatesAsync();
+        if (referenceRatesResponse.IsSuccess)
+            _referenceRates = referenceRatesResponse.Data?.ToList() ?? new();
+
+        var calendarsResponse = await ApiClient.GetPaymentCalendarsAsync();
+        if (calendarsResponse.IsSuccess)
+            _paymentCalendars = calendarsResponse.Data?.ToList() ?? new();
+
+        var compoundingResponse = await ApiClient.GetCompoundingMethodsAsync();
+        if (compoundingResponse.IsSuccess)
+            _compoundingMethods = compoundingResponse.Data?.ToList() ?? new();
+
+        var averagingResponse = await ApiClient.GetAveragingMethodsAsync();
+        if (averagingResponse.IsSuccess)
+            _averagingMethods = averagingResponse.Data?.ToList() ?? new();
+
+        var legTypesResponse = await ApiClient.GetLegTypesAsync();
+        if (legTypesResponse.IsSuccess)
+            _legTypes = legTypesResponse.Data?.ToList() ?? new();
+
+        var payerReceiverResponse = await ApiClient.GetPayerReceiverTypesAsync();
+        if (payerReceiverResponse.IsSuccess)
+            _payerReceiverTypes = payerReceiverResponse.Data?.ToList() ?? new();
+        
+        _isLoading = false;
+    }
+
+    private void UpdateLeg2PayerReceiver()
+    {
+        if (Request.Leg1.PayerReceiver == "PAY")
+        {
+            Request.Leg2.PayerReceiver = "RECEIVE";
+        }
+        else if (Request.Leg1.PayerReceiver == "RECEIVE")
+        {
+            Request.Leg2.PayerReceiver = "PAY";
+        }
+        StateHasChanged();
+    }
+
+    private async Task HandleSubmit()
+    {
+        await OnSubmit.InvokeAsync();
+    }
+
+    private async Task HandleCancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}

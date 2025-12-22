@@ -1,0 +1,128 @@
+@using System.ComponentModel.DataAnnotations
+@using TraderUI.Models
+@using Microsoft.AspNetCore.Components.Forms
+
+<EditForm Model="@Model" OnValidSubmit="HandleSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" />
+    
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="instrument" class="form-label">Instrument</label>
+            <InputText id="instrument" class="form-control" @bind-Value="Model.Instrument" placeholder="e.g., EUR/USD, AAPL, BTC" />
+            <ValidationMessage For="@(() => Model.Instrument)" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="side" class="form-label">Side</label>
+            <InputSelect id="side" class="form-select" @bind-Value="Model.Side">
+                <option value="">Select side...</option>
+                <option value="@TradeSide.Buy">Buy</option>
+                <option value="@TradeSide.Sell">Sell</option>
+            </InputSelect>
+            <ValidationMessage For="@(() => Model.Side)" />
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="quantity" class="form-label">Quantity</label>
+            <InputNumber id="quantity" class="form-control" @bind-Value="Model.Quantity" step="0.01" />
+            <ValidationMessage For="@(() => Model.Quantity)" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="price" class="form-label">Price</label>
+            <InputNumber id="price" class="form-control" @bind-Value="Model.Price" step="0.01" />
+            <ValidationMessage For="@(() => Model.Price)" />
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="currency" class="form-label">Currency</label>
+            <InputSelect id="currency" class="form-select" @bind-Value="Model.Currency">
+                <option value="">Select currency...</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="JPY">JPY</option>
+                <option value="CHF">CHF</option>
+                <option value="CAD">CAD</option>
+                <option value="AUD">AUD</option>
+            </InputSelect>
+            <ValidationMessage For="@(() => Model.Currency)" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="tradeDate" class="form-label">Trade Date</label>
+            <InputDate id="tradeDate" class="form-control" @bind-Value="Model.TradeDate" />
+            <ValidationMessage For="@(() => Model.TradeDate)" />
+        </div>
+    </div>
+    
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @ErrorMessage
+        </div>
+    }
+    
+    <div class="d-flex justify-content-between">
+        @if (ShowCancelButton)
+        {
+            <button type="button" class="btn btn-secondary" @onclick="OnCancel" disabled="@IsSubmitting">
+                Cancel
+            </button>
+        }
+        else
+        {
+            <div></div>
+        }
+        
+        <button type="submit" class="btn btn-primary" disabled="@IsSubmitting">
+            @if (IsSubmitting)
+            {
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                <span> @SubmittingText</span>
+            }
+            else
+            {
+                <span>@SubmitButtonText</span>
+            }
+        </button>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public TradeCreateRequest Model { get; set; } = null!;
+    
+    [Parameter]
+    public EventCallback<TradeCreateRequest> OnSubmit { get; set; }
+    
+    [Parameter]
+    public EventCallback OnCancelClick { get; set; }
+    
+    [Parameter]
+    public string SubmitButtonText { get; set; } = "Submit";
+    
+    [Parameter]
+    public string SubmittingText { get; set; } = "Submitting...";
+    
+    [Parameter]
+    public bool IsSubmitting { get; set; }
+    
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+    
+    [Parameter]
+    public bool ShowCancelButton { get; set; } = true;
+    
+    private async Task HandleSubmit()
+    {
+        await OnSubmit.InvokeAsync(Model);
+    }
+    
+    private async Task OnCancel()
+    {
+        await OnCancelClick.InvokeAsync();
+    }
+}

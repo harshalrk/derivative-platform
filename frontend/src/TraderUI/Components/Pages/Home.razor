@@ -1,0 +1,17 @@
+﻿@page "/"
+@inject TraderUI.Services.SessionService SessionService
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (SessionService.IsUserSet)
+        {
+            Navigation.NavigateTo("/trades");
+        }
+        else
+        {
+            Navigation.NavigateTo("/entry");
+        }
+    }
+}

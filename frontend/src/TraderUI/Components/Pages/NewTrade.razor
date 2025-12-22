@@ -1,0 +1,139 @@
+@page "/new-trade"
+@using TraderUI.Models
+@inject TraderUI.Services.SessionService SessionService
+@inject TraderUI.Services.ApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>New Trade</PageTitle>
+
+@if (isCheckingSession)
+{
+    <div class="container-fluid">
+        <div class="d-flex justify-content-center mt-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+    return;
+}
+
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">Create New Trade</h3>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <label class="form-label">Instrument Type</label>
+                        <select @bind="selectedInstrumentType" class="form-select">
+                            <option value="">-- Select Instrument Type --</option>
+                            @foreach (var instrumentType in _instrumentTypes)
+                            {
+                                <option value="@instrumentType.Name">@instrumentType.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (selectedInstrumentType == "FX")
+                    {
+                        <TradeForm Model="@fxModel"
+                                   OnSubmit="HandleFxSubmit"
+                                   OnCancelClick="HandleCancel"
+                                   SubmitButtonText="Create Trade"
+                                   SubmittingText="Creating..."
+                                   IsSubmitting="@isSubmitting"
+                                   ErrorMessage="@errorMessage" />
+                    }
+                    else if (selectedInstrumentType == "Swap")
+                    {
+                        <SwapForm Request="@swapModel"
+                                  OnSubmit="HandleSwapSubmit"
+                                  OnCancel="HandleCancel"
+                                  SubmitButtonText="Create Swap" />
+                        
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger mt-3">@errorMessage</div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private TradeCreateRequest fxModel = new() { TradeDate = DateTime.Today };
+    private SwapTradeCreateRequest swapModel = new();
+    private string? errorMessage;
+    private bool isSubmitting;
+    private bool isCheckingSession = true;
+    private string selectedInstrumentType = "";
+    private List<InstrumentType> _instrumentTypes = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        if (!SessionService.IsUserSet)
+        {
+            Navigation.NavigateTo("/entry");
+            return;
+        }
+        
+        isCheckingSession = false;
+
+        var response = await ApiClient.GetInstrumentTypesAsync();
+        if (response.IsSuccess)
+        {
+            _instrumentTypes = response.Data?.ToList() ?? new();
+        }
+    }
+    
+    private async Task HandleFxSubmit(TradeCreateRequest request)
+    {
+        if (!SessionService.IsUserSet) return;
+        
+        isSubmitting = true;
+        errorMessage = "FX trades are not yet implemented. Please use Swap trades.";
+        isSubmitting = false;
+        
+        // TODO: Implement FX-specific API endpoint
+        // var response = await ApiClient.CreateFxTradeAsync(request, SessionService.CurrentUserName!);
+    }
+
+    private async Task HandleSwapSubmit()
+    {
+        if (!SessionService.IsUserSet) return;
+        
+        isSubmitting = true;
+        errorMessage = null;
+        
+        try
+        {
+            var response = await ApiClient.CreateSwapAsync(swapModel, SessionService.CurrentUserName!);
+            if (response.IsSuccess)
+            {
+                Navigation.NavigateTo("/trades");
+            }
+            else
+            {
+                errorMessage = response.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void HandleCancel()
+    {
+        Navigation.NavigateTo("/trades");
+    }
+}
