@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: traderdb
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: trader123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader -d traderdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.11-management
+    environment:
+      RABBITMQ_DEFAULT_USER: trader
+      RABBITMQ_DEFAULT_PASS: trader123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    ports:
+      - "7050:7050"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:7050
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=traderdb;Username=trader;Password=trader123
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=trader
+      - RabbitMQ__Password=trader123
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "7051:7051"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:7051
+      - ApiUrl=http://api:7050
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
