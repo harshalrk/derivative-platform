@@ -7,7 +7,7 @@ A real-time swap trading platform built with event sourcing, CQRS, and async pro
 ```bash
 # Start all services
 cd infra/docker
-docker compose up -d
+docker compose -p derivatie-platform up -d 
 
 # Access the application
 # UI: http://localhost:7051
