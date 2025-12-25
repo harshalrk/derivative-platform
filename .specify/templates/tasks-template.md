@@ -48,6 +48,12 @@ description: "Task list template for feature implementation"
 
 **Purpose**: Project initialization and basic structure
 
+**Note**: For multi-service features (Java/Maven marketdata service, .NET services, etc.):
+- Create separate service directories (e.g., `marketdata-service/`, `backend/`, `frontend/`)
+- Each service gets its own build config (pom.xml, .csproj, package.json)
+- Define API contracts in `specs/[feature]/contracts/` for inter-service communication
+- Update `infra/docker/compose.yml` to include all services
+
 - [ ] T001 Create project structure per implementation plan
 - [ ] T002 Initialize [language] project with [framework] dependencies
 - [ ] T003 [P] Configure linting and formatting tools

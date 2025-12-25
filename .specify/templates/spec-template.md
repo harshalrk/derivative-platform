@@ -74,6 +74,8 @@
 
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
+- For multi-service features: What happens when dependent service is unavailable?
+- How are service timeouts and retries handled?
 
 ## Requirements *(mandatory)*
 

@@ -17,12 +17,13 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
+**Language/Version**: [e.g., .NET 8.0, Java 17, Python 3.11 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., ASP.NET Core, Spring Boot (minimal), FastAPI or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, Marten, files or N/A]  
+**Testing**: [e.g., xUnit, JUnit, pytest or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, Docker containers, Kubernetes or NEEDS CLARIFICATION]
+**Project Type**: [single/web/mobile/multi-service - determines source structure]  
+**Service Architecture**: [If multi-service: list services with technologies, e.g., "API (.NET), UI (.NET Blazor), Marketdata (Java/Maven)" or N/A for single service]  
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
 **Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
 **Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
@@ -32,6 +33,11 @@
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 [Gates determined based on constitution file]
+
+**Note**: For multi-service features, verify:
+- P6 (Polyglot Service Architecture): HTTP/JSON APIs, minimal dependencies, explicit contracts
+- P3 (Explicit Market Data Dependencies): If using marketdata service, verify HTTP API contract
+- Inter-service communication patterns documented and versioned
 
 ## Project Structure
 
