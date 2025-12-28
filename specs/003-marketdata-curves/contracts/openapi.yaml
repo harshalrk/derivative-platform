@@ -1,0 +1,657 @@
+openapi: 3.0.3
+info:
+  title: Market Data Curves & Quotes API
+  description: |
+    REST API for managing market data curves and quotes. Supports curve definition with term structures,
+    daily quote entry with 2 decimal precision, and rolling curves/quotes to new dates.
+    
+    **Key Features**:
+    - Temporal curve versioning (each name+date is unique)
+    - Complete quote entry (all instruments required)
+    - Automatic rolling from previous date
+    - Hardcoded reference data (designed for future service integration)
+  version: 1.0.0
+  contact:
+    name: Marketdata Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: http://marketdata-service:8080
+    description: Docker Compose
+
+tags:
+  - name: Reference Data
+    description: Hardcoded enumerations for currencies, indexes, instrument types, tenors
+  - name: Curves
+    description: Curve definition and management
+  - name: Quotes
+    description: Quote entry and retrieval
+  - name: Operations
+    description: Bulk operations like rolling
+
+paths:
+  # ==================== REFERENCE DATA ====================
+  /api/reference/currencies:
+    get:
+      tags: [Reference Data]
+      summary: Get supported currencies
+      description: Returns hardcoded list of currencies (USD, EUR, GBP, JPY)
+      responses:
+        '200':
+          description: List of currencies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  enum: [USD, EUR, GBP, JPY]
+              example: ["USD", "EUR", "GBP", "JPY"]
+
+  /api/reference/indexes:
+    get:
+      tags: [Reference Data]
+      summary: Get supported interest rate indexes
+      description: Returns hardcoded list of indexes (SOFR, LIBOR, EURIBOR, SONIA)
+      responses:
+        '200':
+          description: List of indexes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  enum: [SOFR, LIBOR, EURIBOR, SONIA]
+              example: ["SOFR", "LIBOR", "EURIBOR", "SONIA"]
+
+  /api/reference/instrument-types:
+    get:
+      tags: [Reference Data]
+      summary: Get supported instrument types
+      description: Returns hardcoded list of instrument types (MoneyMarket, Future, Swap)
+      responses:
+        '200':
+          description: List of instrument types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  enum: [MoneyMarket, Future, Swap]
+              example: ["MoneyMarket", "Future", "Swap"]
+
+  /api/reference/tenors:
+    get:
+      tags: [Reference Data]
+      summary: Get supported tenors
+      description: Returns hardcoded list of tenors (ON, 1M, 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y)
+      responses:
+        '200':
+          description: List of tenors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  enum: [ON, 1M, 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y]
+              example: ["ON", "1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "30Y"]
+
+  # ==================== CURVES ====================
+  /api/curves:
+    post:
+      tags: [Curves]
+      summary: Create a new curve
+      description: |
+        Creates a curve with term structure. Date is automatically set to 5 PM Eastern Time (EST/EDT).
+        At least one instrument required. Each tenor can appear only once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurveRequest'
+      responses:
+        '201':
+          description: Curve created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurveResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Curve with same name and date already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "DUPLICATE_CURVE"
+                message: "Curve 'USD-SOFR' for date '2025-12-25' already exists"
+    
+    get:
+      tags: [Curves]
+      summary: List curves
+      description: |
+        List all curve names (distinct) or filter by name to get all dates for a specific curve
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Filter by curve name (returns all dates for that curve)
+      responses:
+        '200':
+          description: List of curves
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                    description: List of distinct curve names (if no filter)
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/CurveSummary'
+                    description: List of curve versions for specified name
+              examples:
+                allNames:
+                  summary: All curve names
+                  value: ["USD-SOFR", "EUR-EURIBOR", "GBP-SONIA"]
+                specificCurve:
+                  summary: All dates for USD-SOFR
+                  value:
+                    - curveId: "550e8400-e29b-41d4-a716-446655440000"
+                      name: "USD-SOFR"
+                      curveDate: "2025-12-25T22:00:00Z"
+                      currency: "USD"
+                      index: "SOFR"
+                      instrumentCount: 5
+                    - curveId: "660f9511-f30c-52e5-b827-557766551111"
+                      name: "USD-SOFR"
+                      curveDate: "2025-12-24T22:00:00Z"
+                      currency: "USD"
+                      index: "SOFR"
+                      instrumentCount: 5
+
+  /api/curves/{curveId}:
+    get:
+      tags: [Curves]
+      summary: Get curve by ID
+      description: Returns curve with all instruments (quotes not included, use /api/quotes endpoint)
+      parameters:
+        - name: curveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Curve details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurveResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    
+    put:
+      tags: [Curves]
+      summary: Update curve structure
+      description: |
+        Updates instruments for a curve. Can add or remove instruments even if quotes exist.
+        Removing instrument leaves orphaned quotes.
+      parameters:
+        - name: curveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instruments]
+              properties:
+                instruments:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/InstrumentInput'
+                  minItems: 1
+      responses:
+        '200':
+          description: Curve updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurveResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    
+    delete:
+      tags: [Curves]
+      summary: Delete curve version
+      description: |
+        Deletes a specific curve version. Associated instruments and quotes remain (orphaned).
+      parameters:
+        - name: curveId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Curve deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/curves/query:
+    get:
+      tags: [Curves]
+      summary: Query curve by name and date
+      description: Get specific curve version by name and date
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "USD-SOFR"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Date in ISO format (YYYY-MM-DD), time automatically set to 5 PM Eastern
+          example: "2025-12-25"
+      responses:
+        '200':
+          description: Curve details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurveResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== QUOTES ====================
+  /api/quotes:
+    post:
+      tags: [Quotes]
+      summary: Save or update quotes
+      description: |
+        Saves quotes for all instruments in a curve version. All instruments must have values (no partial quotes).
+        Overwrites existing quotes if present.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+      responses:
+        '200':
+          description: Quotes saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Curve not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "CURVE_NOT_FOUND"
+                message: "Curve 'USD-SOFR' for date '2025-12-25' not found"
+    
+    get:
+      tags: [Quotes]
+      summary: Get quotes for curve version
+      description: Returns all quotes for instruments in a specific curve version
+      parameters:
+        - name: curveName
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "USD-SOFR"
+        - name: curveDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Date in ISO format (YYYY-MM-DD)
+          example: "2025-12-25"
+      responses:
+        '200':
+          description: Quotes for curve version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== OPERATIONS ====================
+  /api/quotes/roll:
+    post:
+      tags: [Operations]
+      summary: Roll curve and quotes to new date
+      description: |
+        Copies curve structure and quotes from most recent previous date to target date.
+        Validates that previous date has complete quotes for all instruments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollRequest'
+      responses:
+        '200':
+          description: Roll completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RollResponse'
+        '400':
+          description: Validation error (no previous date or incomplete quotes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noPrevious:
+                  summary: No previous curve found
+                  value:
+                    error: "NO_PREVIOUS_CURVE"
+                    message: "No previous curve version with quotes found for 'USD-SOFR' before '2025-12-26'"
+                incompleteQuotes:
+                  summary: Previous curve missing quotes
+                  value:
+                    error: "INCOMPLETE_QUOTES"
+                    message: "Cannot roll: Curve date (2025-12-22) is missing quotes for instruments: [1Y, 5Y]. All instruments must have quotes to roll."
+        '409':
+          description: Target date already exists (confirmation required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "TARGET_EXISTS"
+                message: "Curve 'USD-SOFR' for date '2025-12-26' already exists. Overwrite?"
+
+# ==================== COMPONENTS ====================
+components:
+  schemas:
+    # ===== Curve Schemas =====
+    CurveRequest:
+      type: object
+      required: [name, date, currency, index, instruments]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "USD-SOFR"
+        date:
+          type: string
+          format: date
+          description: Date in ISO format (YYYY-MM-DD), time automatically set to 5 PM Eastern
+          example: "2025-12-25"
+        currency:
+          type: string
+          enum: [USD, EUR, GBP, JPY]
+          example: "USD"
+        index:
+          type: string
+          enum: [SOFR, LIBOR, EURIBOR, SONIA]
+          example: "SOFR"
+        instruments:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstrumentInput'
+          minItems: 1
+          description: At least one instrument required
+    
+    CurveResponse:
+      type: object
+      properties:
+        curveId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        curveDate:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp (5 PM Eastern, stored as UTC)
+        currency:
+          type: string
+        index:
+          type: string
+        instruments:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstrumentOutput'
+        createdAt:
+          type: string
+          format: date-time
+    
+    CurveSummary:
+      type: object
+      properties:
+        curveId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        curveDate:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        index:
+          type: string
+        instrumentCount:
+          type: integer
+    
+    InstrumentInput:
+      type: object
+      required: [type, tenor]
+      properties:
+        type:
+          type: string
+          enum: [MoneyMarket, Future, Swap]
+          example: "MoneyMarket"
+        tenor:
+          type: string
+          enum: [ON, 1M, 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y]
+          example: "ON"
+    
+    InstrumentOutput:
+      type: object
+      properties:
+        instrumentId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [MoneyMarket, Future, Swap]
+        tenor:
+          type: string
+          enum: [ON, 1M, 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y]
+    
+    # ===== Quote Schemas =====
+    QuoteRequest:
+      type: object
+      required: [curveName, curveDate, quotes]
+      properties:
+        curveName:
+          type: string
+          example: "USD-SOFR"
+        curveDate:
+          type: string
+          format: date
+          description: Date in ISO format (YYYY-MM-DD)
+          example: "2025-12-25"
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteInput'
+          description: Must include all instruments in curve
+    
+    QuoteInput:
+      type: object
+      required: [instrumentType, tenor, value]
+      properties:
+        instrumentType:
+          type: string
+          enum: [MoneyMarket, Future, Swap]
+        tenor:
+          type: string
+          enum: [ON, 1M, 3M, 6M, 1Y, 2Y, 5Y, 10Y, 30Y]
+        value:
+          type: number
+          format: double
+          description: Quote value with 2 decimal places (can be positive or negative)
+          example: 5.25
+          multipleOf: 0.01
+    
+    QuoteResponse:
+      type: object
+      properties:
+        curveName:
+          type: string
+        curveDate:
+          type: string
+          format: date-time
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteOutput'
+    
+    QuoteOutput:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        instrumentId:
+          type: string
+          format: uuid
+        instrumentType:
+          type: string
+        tenor:
+          type: string
+        value:
+          type: number
+          format: double
+        updatedAt:
+          type: string
+          format: date-time
+    
+    # ===== Roll Schemas =====
+    RollRequest:
+      type: object
+      required: [curveName, targetDate]
+      properties:
+        curveName:
+          type: string
+          example: "USD-SOFR"
+        targetDate:
+          type: string
+          format: date
+          description: Date to roll to (YYYY-MM-DD)
+          example: "2025-12-26"
+        overwrite:
+          type: boolean
+          default: false
+          description: If true, overwrite existing curve/quotes at target date
+    
+    RollResponse:
+      type: object
+      properties:
+        curveName:
+          type: string
+        sourceDate:
+          type: string
+          format: date-time
+          description: Date rolled from (most recent previous)
+        targetDate:
+          type: string
+          format: date-time
+          description: Date rolled to (5 PM Eastern)
+        instrumentCount:
+          type: integer
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteOutput'
+    
+    # ===== Error Schemas =====
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "All instruments must have quote values. Missing quotes for: [1Y, 5Y]"
+        details:
+          type: object
+          description: Additional error details (optional)
+          additionalProperties: true
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "Curve not found"
+    
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            duplicateTenor:
+              summary: Duplicate tenor
+              value:
+                error: "DUPLICATE_TENOR"
+                message: "Duplicate tenor not allowed. Tenor 3M already exists in this curve."
+            missingInstrument:
+              summary: No instruments
+              value:
+                error: "NO_INSTRUMENTS"
+                message: "At least one instrument is required to create a curve"
+            incompleteQuotes:
+              summary: Missing quotes
+              value:
+                error: "INCOMPLETE_QUOTES"
+                message: "All instruments must have quote values. Missing quotes for: [1Y, 5Y]"
