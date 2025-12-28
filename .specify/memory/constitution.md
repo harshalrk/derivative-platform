@@ -1,14 +1,13 @@
 <!--
 Sync Impact Report
-- Version change: 4.0.0 → 5.0.0
-- Interface change: Removed CLI option; standardized on HTTP API backend + UI frontend
-- Principle updates: Data model details moved to guidance-level constraints
+- Version change: 5.0.0 → 5.1.0
+- Principle updates: Added P6 (Code Maintainability & Single Responsibility)
 - Added sections: None
 - Removed sections: None
 - Templates requiring updates:
   ✅ `.specify/templates/plan-template.md` — Constitution Check remains compatible
   ✅ `.specify/templates/spec-template.md` — Align stories with UI+API interaction
-  ✅ `.specify/templates/tasks-template.md` — Emphasize frontend/backend tasks
+  ✅ `.specify/templates/tasks-template.md` — Emphasize frontend/backend tasks, consider file size in task breakdown
   ⚠ Pending: `.specify/templates/commands/*` — Directory not present; keep generic references
 - Deferred TODOs:
   TODO(RATIFICATION_DATE): Original adoption date not found in repo context
@@ -41,6 +40,7 @@ data snapshots to guarantee consistent results.
 
 Rationale: Transparent dependencies prevent hidden variability in pricing.
 
+
 ### P4. Error Handling
 Error messages MUST be actionable and never silently swallowed. Validation
 errors MUST return clear reasons. Logging is OPTIONAL.
@@ -53,6 +53,18 @@ All monetary outputs MUST specify currency; numerical precision MUST be defined
 for prices and risk metrics. Avoid implicit unit conversions.
 
 Rationale: Financial correctness requires explicit units and precision.
+
+### P6. Code Maintainability & Single Responsibility
+Code MUST follow the Single Responsibility Principle: each file, class, or
+component MUST have one clear purpose. File complexity MUST remain readable for
+an average engineer (typically <500 lines for components, <300 for classes).
+When files exceed readability thresholds, they MUST be refactored into smaller,
+focused units with clear interfaces.
+
+Rationale: Maintainability and understandability are critical for long-term
+system health. Code that is too complex or tries to do too many things becomes
+difficult to test, debug, and extend. Enforcing SRP keeps the codebase
+approachable for all team members.
 
 ## Additional Constraints
 
@@ -76,6 +88,7 @@ This constitution supersedes other practices for the trading system. Amendments
 MUST include version bump rationale and migration notes (data/interface changes).
 Compliance reviews MUST verify: capture schema adherence, deterministic pricing
 interfaces, explicit market data dependencies, error clarity, precision/units,
-and semantic versioning. Tests and logging are optional for compliance.
+code maintainability and single responsibility, and semantic versioning. Tests
+and logging are optional for compliance.
 
-**Version**: 5.0.0 | **Ratified**: TODO(RATIFICATION_DATE) | **Last Amended**: 2025-12-14
+**Version**: 5.1.0 | **Ratified**: TODO(RATIFICATION_DATE) | **Last Amended**: 2025-12-27
