@@ -63,5 +63,50 @@ services:
     depends_on:
       - api
 
+  marketdata-service:
+    build:
+      context: ../..
+      dockerfile: marketdata-service/Dockerfile
+    ports:
+      - "7053:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/marketdata
+      - SPRING_DATASOURCE_USERNAME=trader
+      - SPRING_DATASOURCE_PASSWORD=trader123
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_FLYWAY_ENABLED=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  marketdata-ui:
+    build:
+      context: ../..
+      dockerfile: marketdata-ui/Dockerfile
+    ports:
+      - "7052:80"
+    environment:
+      - VITE_API_BASE_URL=http://marketdata-service:8080
+    depends_on:
+      marketdata-service:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ui
+      - marketdata-ui
+    networks:
+      - default
+
 volumes:
   postgres_data:
